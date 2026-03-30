@@ -135,6 +135,14 @@ void init_default_style(struct mako_style *style) {
 	style->button_bindings.middle.action = MAKO_BINDING_NONE;
 	style->touch_binding.action = MAKO_BINDING_DISMISS;
 
+	style->box_shadow_offset.top = 0;
+	style->box_shadow_offset.right = 0;
+	style->box_shadow_offset.bottom = 0;
+	style->box_shadow_offset.left = 0;
+	style->box_shadow_blur = 0;
+	style->box_shadow_color = 0x0000007F;
+	style->box_shadow_quality = 100;  // Default: high quality
+
 	// Everything in the default config is explicitly specified.
 	memset(&style->spec, true, sizeof(struct mako_style_spec));
 }
@@ -400,6 +408,26 @@ bool apply_style(struct mako_style *target, const struct mako_style *style) {
 		target->spec.notify_binding = true;
 	}
 
+	if (style->spec.box_shadow_offset) {
+		target->box_shadow_offset = style->box_shadow_offset;
+		target->spec.box_shadow_offset = true;
+	}
+
+	if (style->spec.box_shadow_blur) {
+		target->box_shadow_blur = style->box_shadow_blur;
+		target->spec.box_shadow_blur = true;
+	}
+
+	if (style->spec.box_shadow_color) {
+		target->box_shadow_color = style->box_shadow_color;
+		target->spec.box_shadow_color = true;
+	}
+
+	if (style->spec.box_shadow_quality) {
+		target->box_shadow_quality = style->box_shadow_quality;
+		target->spec.box_shadow_quality = true;
+	}
+
 	return true;
 }
 
@@ -656,6 +684,36 @@ static bool apply_style_option(struct mako_style *style, const char *name,
 			style->padding.right = max(style->border_radius.right, style->padding.right);
 		}
 		return spec->border_radius;
+	} else if (strcmp(name, "box-shadow") == 0) {
+		struct mako_box_shadow shadow;
+		if (!parse_box_shadow(value, &shadow)) {
+			return false;
+		}
+		style->box_shadow_offset.top = -shadow.offset_y;
+		style->box_shadow_offset.bottom = shadow.offset_y;
+		style->box_shadow_offset.left = -shadow.offset_x;
+		style->box_shadow_offset.right = shadow.offset_x;
+		style->box_shadow_blur = shadow.blur;
+		style->box_shadow_color = shadow.color;
+		style->box_shadow_quality = shadow.quality;
+		spec->box_shadow_offset = true;
+		spec->box_shadow_blur = true;
+		spec->box_shadow_color = true;
+		spec->box_shadow_quality = true;
+		spec->box_shadow_sigma = true;
+		return true;
+	} else if (strcmp(name, "box-shadow-offset") == 0) {
+		return spec->box_shadow_offset = parse_directional(value, &style->box_shadow_offset);
+	} else if (strcmp(name, "box-shadow-blur") == 0) {
+		return spec->box_shadow_blur = parse_int_ge(value, &style->box_shadow_blur, 0);
+	} else if (strcmp(name, "box-shadow-color") == 0) {
+		return spec->box_shadow_color = parse_color(value, &style->box_shadow_color);
+	} else if (strcmp(name, "box-shadow-quality") == 0) {
+		return spec->box_shadow_quality = parse_int_ge(value, &style->box_shadow_quality, 10);
+	} else if (strcmp(name, "box-shadow-sigma") == 0) {
+	    style->box_shadow_sigma = atof(value);
+	    spec->box_shadow_sigma = true;
+	    return true;
 	} else if (strcmp(name, "max-visible") == 0) {
 		return style->spec.max_visible = parse_int(value, &style->max_visible);
 	} else if (strcmp(name, "output") == 0) {
@@ -908,6 +966,11 @@ int parse_config_arguments(struct mako_config *config, int argc, char **argv) {
 		{"border-color", required_argument, 0, 0},
 		{"border-radius", required_argument, 0, 0},
 		{"progress-color", required_argument, 0, 0},
+		{"box-shadow", required_argument, 0, 0},
+		{"box-shadow-offset", required_argument, 0, 0},
+		{"box-shadow-blur", required_argument, 0, 0},
+		{"box-shadow-color", required_argument, 0, 0},
+		{"box-shadow-quality", required_argument, 0, 0},
 		{"icons", required_argument, 0, 0},
 		{"icon-location", required_argument, 0, 0},
 		{"icon-path", required_argument, 0, 0},

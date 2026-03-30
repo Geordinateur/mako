@@ -76,4 +76,17 @@ extern const char VALID_FORMAT_SPECIFIERS[];
 
 bool parse_format(const char *string, char **out);
 
+// Parse box-shadow in CSS-like format: "offset-x offset-y blur [color] [quality]"
+// Example: "0 6 12 #00000040 150" or just "0 6 12"
+struct mako_box_shadow {
+	int32_t offset_x;
+	int32_t offset_y;
+	int32_t blur;
+	uint32_t color;
+	int32_t quality;
+	double sigma;
+};
+
+bool parse_box_shadow(const char *string, struct mako_box_shadow *out);
+
 #endif

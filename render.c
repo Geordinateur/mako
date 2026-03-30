@@ -13,10 +13,6 @@
 
 #define M_PI 3.14159265358979323846
 
-// HiDPI conventions: local variables are in surface-local coordinates, unless
-// they have a "buffer_" prefix, in which case they are in buffer-local
-// coordinates.
-
 static void set_source_u32(cairo_t *cairo, uint32_t color) {
 	cairo_set_source_rgba(cairo,
 		(color >> (3*8) & 0xFF) / 255.0,
@@ -110,27 +106,23 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 	bool icon_vertical = style->icon_location == MAKO_ICON_LOCATION_TOP ||
 		style->icon_location == MAKO_ICON_LOCATION_BOTTOM;
 
-	// If the compositor has forced us to shrink down, do so.
 	int notif_width =
 		(style->width <= surface->width) ? style->width : surface->width;
 
-	// offset_x is for the entire draw operation inside the surface
 	int offset_x;
 	if (surface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT) {
 		offset_x = surface->width - notif_width - style->margin.right;
 	} else if (surface->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) {
 		offset_x = style->margin.left;
-	} else { // CENTER has nothing to & with, so it's the else case
+	} else {
 		offset_x = (surface->width - notif_width) / 2;
 	}
 
-	// text_x is the offset of the text inside our draw operation
 	double text_x = style->padding.left;
 	if (icon != NULL && style->icon_location == MAKO_ICON_LOCATION_LEFT) {
 		text_x = icon->width + 2*style->padding.left;
 	}
 
-	// text_y is the offset of the text inside our draw operation
 	double text_y = style->padding.top;
 	if (icon != NULL && style->icon_location == MAKO_ICON_LOCATION_TOP) {
 		text_y = icon->height + 2*style->padding.top;
@@ -170,7 +162,6 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 	} else {
 		fprintf(stderr, "cannot parse pango markup: %s\n", error->message);
 		g_error_free(error);
-		// fallback to plain text
 		pango_layout_set_text(layout, text, -1);
 	}
 
@@ -184,8 +175,6 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 	int buffer_text_height = 0;
 	int buffer_text_width = 0;
 
-	// If there's no text to be rendered, the notification can shrink down
-	// smaller than the line height.
 	if (pango_layout_get_character_count(layout) > 0) {
 		pango_layout_get_pixel_size(layout, &buffer_text_width, &buffer_text_height);
 	}
@@ -214,9 +203,86 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 
 	int notif_background_width = notif_width - style->border_size;
 
-	// Define the shape of the notification. The stroke is drawn centered on
-	// the edge of the fill, so we need to inset the shape by half the
-	// border_size.
+	// Render box shadow if configured
+	if (style->box_shadow_blur > 0 ||
+	    style->box_shadow_offset.top != 0 ||
+	    style->box_shadow_offset.right != 0 ||
+	    style->box_shadow_offset.bottom != 0 ||
+	    style->box_shadow_offset.left != 0) {
+
+		double shadow_offset_x = (style->box_shadow_offset.right - style->box_shadow_offset.left) / 2.0;
+		double shadow_offset_y = (style->box_shadow_offset.bottom - style->box_shadow_offset.top) / 2.0;
+
+		double shadow_r = ((style->box_shadow_color >> 24) & 0xFF) / 255.0;
+		double shadow_g = ((style->box_shadow_color >> 16) & 0xFF) / 255.0;
+		double shadow_b = ((style->box_shadow_color >> 8) & 0xFF) / 255.0;
+		double shadow_a = (style->box_shadow_color & 0xFF) / 255.0;
+
+		if (style->box_shadow_blur > 0) {
+			int blur_radius = style->box_shadow_blur;
+			int num_layers = style->box_shadow_quality > 0 ? style->box_shadow_quality : 60;
+			if (num_layers < 10) num_layers = 10;
+			if (num_layers > 200) num_layers = 200;
+			double sigma = style->box_shadow_sigma > 0 ? style->box_shadow_sigma : 0.45;
+
+			cairo_surface_t *shadow_surface = cairo_image_surface_create(
+				CAIRO_FORMAT_ARGB32,
+				cairo_image_surface_get_width(cairo_get_target(cairo)),
+				cairo_image_surface_get_height(cairo_get_target(cairo))
+			);
+			cairo_t *shadow_cr = cairo_create(shadow_surface);
+
+			// Rendu de la couche la plus grande en premier (t=1, spread max)
+			// puis les couches plus petites par-dessus avec OVER.
+			// La première couche utilise SOURCE pour établir la base proprement.
+			for (int i = num_layers - 1; i >= 0; i--) {
+				double t = (double)i / (num_layers - 1);
+				double spread = blur_radius * t;
+				double gaussian = exp(-(t * t) / (2.0 * sigma * sigma));
+				// alpha normalisé : gaussian seul, shadow_a contrôle le max
+				double alpha = shadow_a * gaussian;
+				double r_spread = spread * 0.8;
+
+				if (i == num_layers - 1) {
+					cairo_set_operator(shadow_cr, CAIRO_OPERATOR_SOURCE);
+				} else {
+					cairo_set_operator(shadow_cr, CAIRO_OPERATOR_OVER);
+				}
+
+				set_rounded_rectangle(shadow_cr,
+					offset_x + style->border_size / 2.0 + shadow_offset_x - spread,
+					offset_y + style->border_size / 2.0 + shadow_offset_y - spread,
+					notif_background_width + spread * 2,
+					notif_height - style->border_size + spread * 2,
+					scale,
+					radius_top_left + r_spread,
+					radius_top_right + r_spread,
+					radius_bottom_right + r_spread,
+					radius_bottom_left + r_spread);
+
+				cairo_set_source_rgba(shadow_cr, shadow_r, shadow_g, shadow_b, alpha);
+				cairo_fill(shadow_cr);
+			}
+
+			cairo_set_source_surface(cairo, shadow_surface, 0, 0);
+			cairo_paint(cairo);
+
+			cairo_destroy(shadow_cr);
+			cairo_surface_destroy(shadow_surface);
+
+		} else {
+			set_rounded_rectangle(cairo,
+				offset_x + style->border_size / 2.0 + shadow_offset_x,
+				offset_y + style->border_size / 2.0 + shadow_offset_y,
+				notif_background_width,
+				notif_height - style->border_size,
+				scale, radius_top_left, radius_top_right, radius_bottom_right, radius_bottom_left);
+
+			cairo_set_source_rgba(cairo, shadow_r, shadow_g, shadow_b, shadow_a);
+			cairo_fill(cairo);
+		}
+	}
+
 	set_rounded_rectangle(cairo,
 		offset_x + style->border_size / 2.0,
 		offset_y + style->border_size / 2.0,
@@ -224,18 +290,11 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 		notif_height - style->border_size,
 		scale, radius_top_left, radius_top_right, radius_bottom_right, radius_bottom_left);
 
-	// Render background, keeping the path.
 	set_source_u32(cairo, style->colors.background);
 	cairo_fill_preserve(cairo);
 
-	// Keep a copy of the path. We need it later to draw the border on top, but
-	// we have to create a new one for progress in the meantime.
 	cairo_path_t *border_path = cairo_copy_path(cairo);
 
-	// Render progress. We need to render this as a normal rectangle, but clip
-	// it to the rounded rectangle we drew for the background. We also inset it
-	// a bit further so that 0 and 100 percent are aligned to the inside edge
-	// of the border and we can actually see the whole range.
 	int progress_width =
 		(notif_background_width - style->border_size) * progress / 100;
 	if (progress_width < 0) {
@@ -257,10 +316,6 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 	cairo_fill(cairo);
 	cairo_restore(cairo);
 
-	// Render border, using the SOURCE operator to clip away the background
-	// and progress beneath. This is the only way to make the background appear
-	// to line up with the inside of a rounded border, while not revealing any
-	// of the background when using a translucent border color.
 	cairo_save(cairo);
 	cairo_append_path(cairo, border_path);
 	set_source_u32(cairo, style->colors.border);
@@ -272,7 +327,6 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 	cairo_path_destroy(border_path);
 
 	if (icon != NULL) {
-		// Render icon
 		double xpos = -1;
 		double ypos = -1;
 		double ypos_center = offset_y + style->border_size +
@@ -315,7 +369,6 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 		text_y = (notif_height - text_height - border_size) / 2;
 	}
 
-	// Render text
 	set_source_u32(cairo, style->colors.text);
 	move_to(cairo,
 		offset_x + style->border_size + text_x,
@@ -324,7 +377,6 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 	pango_cairo_update_layout(cairo, layout);
 	pango_cairo_show_layout(cairo, layout);
 
-	// Update hotspot with calculated location
 	if (hotspot != NULL) {
 		hotspot->x = offset_x;
 		hotspot->y = offset_y;
@@ -334,7 +386,15 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 
 	g_object_unref(layout);
 
-	return notif_height;
+	int shadow_extra_height = 0;
+	if (style->box_shadow_blur > 0 ||
+	    style->box_shadow_offset.bottom != 0 ||
+	    style->box_shadow_offset.top != 0) {
+		double shadow_offset_y = (style->box_shadow_offset.bottom - style->box_shadow_offset.top) / 2.0;
+		shadow_extra_height = style->box_shadow_blur / 2 + (shadow_offset_y > 0 ? shadow_offset_y : 0);
+	}
+
+	return notif_height + shadow_extra_height;
 }
 
 void render(struct mako_surface *surface, struct pool_buffer *buffer, int scale,
@@ -348,7 +408,6 @@ void render(struct mako_surface *surface, struct pool_buffer *buffer, int scale,
 		return;
 	}
 
-	// Clear
 	cairo_save(cairo);
 	cairo_set_source_rgba(cairo, 0, 0, 0, 0);
 	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
@@ -368,25 +427,15 @@ void render(struct mako_surface *surface, struct pool_buffer *buffer, int scale,
 		}
 		++total_notifications;
 
-		// Immediately before rendering we need to re-match all of the criteria
-		// so that matches against the anchor and output work even if the
-		// output was automatically assigned by the compositor.
 		int rematch_count = apply_each_criteria(&state->config.criteria, notif);
 		if (rematch_count == -1) {
-			// We encountered an allocation failure or similar while applying
-			// criteria. The notification may be partially matched, but the
-			// worst case is that it has an empty style, so bail.
 			fprintf(stderr, "Failed to apply criteria\n");
 			break;
 		} else if (rematch_count == 0) {
-			// This should be impossible, since the global criteria is always
-			// present in a mako_config and matches everything.
 			fprintf(stderr, "Notification matched zero criteria?!\n");
 			break;
 		}
 
-		// Note that by this point, everything in the style is guaranteed to
-		// be specified, so we don't need to check.
 		struct mako_style *style = &notif->style;
 
 		if (style->max_visible >= 0 &&
@@ -431,10 +480,6 @@ void render(struct mako_surface *surface, struct pool_buffer *buffer, int scale,
 		pending_bottom_margin = style->margin.bottom;
 
 		if (notif->group_index < 1) {
-			// If the notification is ungrouped, or is the first in a group, it
-			// counts against max_visible. Even if other notifications in the
-			// group are rendered based on criteria, a group is considered a
-			// single entity for this purpose.
 			++visible_count;
 		}
 	}

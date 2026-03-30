@@ -360,3 +360,85 @@ bool parse_anchor(const char *string, uint32_t *out) {
 
 	return true;
 }
+
+// Parse box-shadow in CSS-like format: "offset-x offset-y blur [color] [quality]"
+// Example: "0 6 12 #00000040 150" or minimal "0 6 12"
+bool parse_box_shadow(const char *string, struct mako_box_shadow *out) {
+// Set defaults
+out->offset_x = 0;
+out->offset_y = 0;
+out->blur = 0;
+out->color = 0x0000007F;
+out->quality = 100;
+out->sigma = 0.0;
+
+char *str_copy = strdup(string);
+if (!str_copy) {
+return false;
+}
+
+char *saveptr = NULL;
+char *token;
+int field = 0;
+
+token = strtok_r(str_copy, " \t", &saveptr);
+while (token != NULL && field < 5) {
+switch (field) {
+case 0: // offset-x
+if (!parse_int(token, &out->offset_x)) {
+free(str_copy);
+return false;
+}
+break;
+case 1: // offset-y
+if (!parse_int(token, &out->offset_y)) {
+free(str_copy);
+return false;
+}
+break;
+case 2: // blur
+if (!parse_int_ge(token, &out->blur, 0)) {
+free(str_copy);
+return false;
+}
+break;
+case 3: // color (optional)
+if (token[0] == '#') {
+if (!parse_color(token, &out->color)) {
+free(str_copy);
+return false;
+}
+} else {
+// Not a color, might be quality
+if (!parse_int_ge(token, &out->quality, 10)) {
+free(str_copy);
+return false;
+}
+field++; // Skip color field
+}
+break;
+case 4: // quality (optional)
+if (!parse_int_ge(token, &out->quality, 10)) {
+free(str_copy);
+return false;
+}
+break;
+case 5: // sigma (optional)
+out->sigma = atof(token);
+break;
+}
+
+field++;
+token = strtok_r(NULL, " \t", &saveptr);
+}
+
+free(str_copy);
+
+// At minimum we need offset-x, offset-y, and blur
+if (field < 3) {
+fprintf(stderr, "box-shadow requires at least 3 values: offset-x offset-y blur\n");
+return false;
+}
+
+return true;
+}

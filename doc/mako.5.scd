@@ -182,6 +182,57 @@ Supported actions:
 
 	Default: 0
 
+*box-shadow*=_offset-x offset-y blur [color] [quality]_
+	Set box shadow using CSS-like syntax. This is a shorthand for setting all
+	box-shadow-* options at once.
+	
+	Parameters:
+	- offset-x: Horizontal offset in pixels (positive = right, negative = left)
+	- offset-y: Vertical offset in pixels (positive = down, negative = up)
+	- blur: Blur radius in pixels
+	- color: Optional shadow color in #RRGGBBAA format (default: #0000007F)
+	- quality: Optional rendering quality 10-200 (default: 100)
+
+	Examples:
+	- box-shadow=0 6 12
+	- box-shadow=0 6 12 #00000040
+	- box-shadow=0 6 12 #00000040 150
+
+	Note: You can also use individual box-shadow-* options for more control.
+
+	Default: 0 0 0
+
+*box-shadow-offset*=_directional_
+	Set box shadow offset on each side to the size specified by _directional_. See
+	*DIRECTIONAL VALUES* for more information. The shadow will be offset by the
+	average of the horizontal (right - left) and vertical (bottom - top) values.
+
+	Default: 0,0,0,0
+
+*box-shadow-blur*=_px_
+	Set box shadow blur radius to _px_ pixels. Higher values create a softer,
+	more diffused shadow. Set to 0 for a sharp shadow.
+
+	Default: 0
+
+*box-shadow-color*=_color_
+	Set box shadow color to _color_. See *COLORS* for more information.
+	The alpha channel controls the shadow's transparency.
+
+	Default: #0000007F
+
+*box-shadow-quality*=_n_
+	Set box shadow rendering quality (number of blur layers). Higher values
+	produce smoother shadows but may impact performance. Range: 10-200.
+	
+	Recommended values:
+	- 50: Fast, visible steps
+	- 100: Balanced (default)
+	- 150: Very smooth
+	- 200: Ultra smooth
+
+	Default: 100
+
 *progress-color*=[over|source] _color_
 	Set popup progress indicator color to _color_. See *COLOR* for more
 	information. To draw the progress indicator on top of the background

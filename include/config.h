@@ -42,7 +42,7 @@ struct mako_style_spec {
 	bool width, height, outer_margin, margin, padding, border_size, border_radius, font,
 		markup, format, text_alignment, actions, default_timeout, ignore_timeout,
 		icons, max_icon_size, icon_path, icon_border_radius, group_criteria_spec, invisible, history,
-		icon_location, max_visible, layer, output, anchor;
+		icon_location, max_visible, layer, output, anchor, box_shadow_offset, box_shadow_blur, box_shadow_color, box_shadow_quality, box_shadow_sigma;
 	struct {
 		bool background, text, border, progress;
 	} colors;
@@ -100,6 +100,12 @@ struct mako_style {
 		struct mako_binding left, right, middle;
 	} button_bindings;
 	struct mako_binding touch_binding, notify_binding;
+
+	struct mako_directional box_shadow_offset;
+	int32_t box_shadow_blur;
+	uint32_t box_shadow_color;
+	int32_t box_shadow_quality;  // Number of layers for blur (higher = smoother, slower)
+	double box_shadow_sigma;
 };
 
 struct mako_config {
