@@ -225,6 +225,14 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 			if (num_layers > 200) num_layers = 200;
 			double sigma = style->box_shadow_sigma > 0 ? style->box_shadow_sigma : 0.45;
 
+			// Calculate normalization factor
+			double gaussian_sum = 0.0;
+			for (int i = 0; i < num_layers; i++) {
+				double t = (double)i / (num_layers - 1);
+				double gaussian = exp(-(t * t) / (2.0 * sigma * sigma));
+				gaussian_sum += gaussian;
+			}
+
 			cairo_surface_t *shadow_surface = cairo_image_surface_create(
 				CAIRO_FORMAT_ARGB32,
 				cairo_image_surface_get_width(cairo_get_target(cairo)),
@@ -239,8 +247,8 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 				double t = (double)i / (num_layers - 1);
 				double spread = blur_radius * t;
 				double gaussian = exp(-(t * t) / (2.0 * sigma * sigma));
-				// alpha normalisé : gaussian seul, shadow_a contrôle le max
-				double alpha = shadow_a * gaussian;
+				// Normalize alpha so total doesn't exceed shadow_a
+				double alpha = shadow_a * gaussian / gaussian_sum;
 				double r_spread = spread * 0.8;
 
 				if (i == num_layers - 1) {
